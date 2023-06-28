@@ -1,105 +1,96 @@
-const cityInput = document.querySelector(".city-input");
-const searchButton = document.querySelector(".search-btn");
-const locationButton = document.querySelector(".location-btn");
-const currentWeatherDiv = document.querySelector(".current-weather");
-const weatherCardsDiv = document.querySelector(".weather-cards");
+const wrapper = document.querySelector(".wrapper"),
+inputPart = document.querySelector(".input-part"),
+infoTxt = inputPart.querySelector(".info-txt"),
+inputField = inputPart.querySelector("input"),
+locationBtn = inputPart.querySelector("button"),
+weatherPart = wrapper.querySelector(".weather-part"),
+wIcon = weatherPart.querySelector("img"),
+arrowBack = wrapper.querySelector("header i");
 
-const API_KEY = "fd79d805c14820532988d0976cc753e6"; //API key for OpenWeatherMap API
+let api;
 
-const createWeatherCard = (cityName, weatherItem, index) => {
-    if(index === 0 ) { //HTML for the main weather card
-        return `<div class="details">
-                    <h3>${cityName} (${weatherItem.dt_txt.split("  ")[0]})</h3>
-                    <h4>Suhu: ${(weatherItem.main.temp - 302.09).toFixed(2)}°C</h4>
-                    <h4>Angin: ${weatherItem.wind.speed}M/S</h4>
-                    <h4>kelembapan: ${weatherItem.main.humidity}%</h4>
-                </div>
-                <div class="icon">
-                <img src="https://openweathermap.org/img/wn/${weatherItem.weather[0].icon}@4x.png"alt="weather-icon"/>
-                    <h4> ${weatherItem.weather[0].description}</h4>
-                </div>`;
-    } else {    //HTML for the other five day forecast card
-        return `<li class="card">
-                    <h3>(${weatherItem.dt_txt.split(" ")[0]})</h3>
-                    <img src="https://openweathermap.org/img/wn/${weatherItem.weather[0].icon}@2x.png"alt="weather-icon"/>
-                    <h4>Suhu: ${(weatherItem.main.temp - 302.09).toFixed(2)}°C</h4>
-                    <h4>Angin: ${weatherItem.wind.speed}M/S</h4>
-                    <h4>kelembapan: ${weatherItem.main.humidity}%</h4>
-                </li>`;
+inputField.addEventListener("keyup", e =>{
+    // if user pressed enter btn and input value is not empty
+    if(e.key == "Enter" && inputField.value != ""){
+        requestApi(inputField.value);
     }
-};
+});
 
-const getWeatherDetails = (cityName, lat, lon) => {
-    const WEATHER_API_URL = `http://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}`;
+locationBtn.addEventListener("click", () =>{
+    if(navigator.geolocation){ // if browser support geolocation api
+        navigator.geolocation.getCurrentPosition(onSuccess, onError);
+    }else{
+        alert("Your browser not support geolocation api");
+    }
+});
 
-    fetch(WEATHER_API_URL).then(res => res.json()).then(data => {
-        // Filter the forecast to get only one forecast per day
-            const uniqueForecastDays = [];
-            const fiveDaysForecastDays = data.list.filter(forecast => {
-                const forecastDate = new Date(forecast.dt_txt).getDate();
-                if(!uniqueForecastDays.includes(forecastDate)) {
-                    return uniqueForecastDays.push(forecastDate);
-            }
-        });
+function requestApi(city){
+    api = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=your_api_key`;
+    fetchData();
+}
 
-        // clearing provious weather data
-        cityInput.value = "";
-        currentWeatherDiv.value = "";
-        weatherCardsDiv.innerHTML = "";
+function onSuccess(position){
+    const {latitude, longitude} = position.coords; // getting lat and lon of the user device from coords obj
+    api = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&units=metric&appid=your_api_key`;
+    fetchData();
+}
 
-        // Creating weather cards and adding them to the DOM
-        fiveDaysForecastDays.forEach((weatherItem, index) => {
-            if(index === 0 ) {
-                currentWeatherDiv.insertAdjacentHTML("beforeend", createWeatherCard(cityName, weatherItem, index));
-            } else {
-                weatherCardsDiv.insertAdjacentHTML("beforeend", createWeatherCard(cityName, weatherItem, index));
-            }
+function onError(error){
+    // if any error occur while getting user location then we'll show it in infoText
+    infoTxt.innerText = error.message;
+    infoTxt.classList.add("error");
+}
 
-        });
-    }).catch(() => {
-        alert("Terjadi kesalahan saat mengambil ramalan cuaca!");
+function fetchData(){
+    infoTxt.innerText = "Getting weather details...";
+    infoTxt.classList.add("pending");
+    // getting api response and returning it with parsing into js obj and in another 
+    // then function calling weatherDetails function with passing api result as an argument
+    fetch(api).then(res => res.json()).then(result => weatherDetails(result)).catch(() =>{
+        infoTxt.innerText = "Something went wrong";
+        infoTxt.classList.replace("pending", "error");
     });
-
 }
 
-const getCityCoordinates = () => {
-    const cityName = cityInput.value.trim(); // Get user entered city name and remove extra spaces
-    if(!cityName) return;// Return if ciyName is empty
-    const GEOCODING_API_URL = `http://api.openweathermap.org/geo/1.0/direct?q=${cityName}&limit=5&appid=${API_KEY}`;
+function weatherDetails(info){
+    if(info.cod == "404"){ // if user entered city name isn't valid
+        infoTxt.classList.replace("pending", "error");
+        infoTxt.innerText = `${inputField.value} isn't a valid city name`;
+    }else{
+        //getting required properties value from the whole weather information
+        const city = info.name;
+        const country = info.sys.country;
+        const {description, id} = info.weather[0];
+        const {temp, feels_like, humidity} = info.main;
 
-    //Get entered city coordinates (latitude, longtitude, and name) from the API response
-    fetch(GEOCODING_API_URL).then(res => res.json()).then(data => {
-        if(!data.length) return alert(`Tidak ditemukan koordinat untuk ${cityName}`);
-        const { name, lat, lon } = data[0];
-        getWeatherDetails(name, lat, lon);
-    }).catch(() => {
-        alert("Terjadi kesalahan saat mengambil koordinat");
-    });
-
+        // using custom weather icon according to the id which api gives to us
+        if(id == 800){
+            wIcon.src = "icons/clear.svg";
+        }else if(id >= 200 && id <= 232){
+            wIcon.src = "icons/storm.svg";  
+        }else if(id >= 600 && id <= 622){
+            wIcon.src = "icons/snow.svg";
+        }else if(id >= 701 && id <= 781){
+            wIcon.src = "icons/haze.svg";
+        }else if(id >= 801 && id <= 804){
+            wIcon.src = "icons/cloud.svg";
+        }else if((id >= 500 && id <= 531) || (id >= 300 && id <= 321)){
+            wIcon.src = "icons/rain.svg";
+        }
+        
+        //passing a particular weather info to a particular element
+        weatherPart.querySelector(".temp .numb").innerText = Math.floor(temp);
+        weatherPart.querySelector(".weather").innerText = description;
+        weatherPart.querySelector(".location span").innerText = `${city}, ${country}`;
+        weatherPart.querySelector(".temp .numb-2").innerText = Math.floor(feels_like);
+        weatherPart.querySelector(".humidity span").innerText = `${humidity}%`;
+        infoTxt.classList.remove("pending", "error");
+        infoTxt.innerText = "";
+        inputField.value = "";
+        wrapper.classList.add("active");
+    }
 }
 
-const getUserCoordinates = () => {
-    navigator.geolocation.getCurrentPosition(
-        position => {
-            const { latitude, longitude } = position.coords;    
-            const REVERSE_GEOCODING_URL = `http://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${API_KEY}`;
-            
-            // Get city name from coordinates using reverse geocoding API
-            fetch(REVERSE_GEOCODING_URL).then(res => res.json()).then(data => {
-                const { name } = data[0];
-                getWeatherDetails(name, latitude, longitude);
-            }).catch(() => {
-                alert("Terjadi kesalahan saat mengambil koordinat");
-            });
-        },
-        Error => {
-            if(Error.code === Error.PERMISSION_DENIED) {
-                alert("Permintaan lokasi ditolak. Harap setel ulang izin lokasi untuk memberikan akses lagi.")
-            }
-        }   
-    )
-}
-
-locationButton.addEventListener("click", getUserCoordinates);
-searchButton.addEventListener("click", getCityCoordinates);
-cityInput.addEventListener("keyup", e => e.key === "Enter" && getCityCoordinates);
+arrowBack.addEventListener("click", ()=>{
+    wrapper.classList.remove("active");
+});
